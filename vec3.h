@@ -112,4 +112,78 @@ inline vec3 operator-(vec3 a, vec3 b) {
   return vec3(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
+// ============================================================================
+// BVH (Bounding Volume Hierarchy) Acceleration Structure
+// ============================================================================
+
+// Axis-Aligned Bounding Box
+struct AABB {
+  vec3 min, max;
+
+  AABB() : min(vec3(1e30f, 1e30f, 1e30f)), max(vec3(-1e30f, -1e30f, -1e30f)) {}
+  AABB(vec3 min, vec3 max) : min(min), max(max) {}
+
+  // Expand to include a point
+  void expand(const vec3& p) {
+    min.x = fmin(min.x, p.x);
+    min.y = fmin(min.y, p.y);
+    min.z = fmin(min.z, p.z);
+    max.x = fmax(max.x, p.x);
+    max.y = fmax(max.y, p.y);
+    max.z = fmax(max.z, p.z);
+  }
+
+  // Expand to include another AABB
+  void expand(const AABB& other) {
+    expand(other.min);
+    expand(other.max);
+  }
+
+  // Ray-AABB intersection test (slab method)
+  bool intersect(const vec3& rayOrigin, const vec3& rayDirInv, float tMin, float tMax) const {
+    for (int i = 0; i < 3; i++) {
+      float t1 = ((&min.x)[i] - (&rayOrigin.x)[i]) * (&rayDirInv.x)[i];
+      float t2 = ((&max.x)[i] - (&rayOrigin.x)[i]) * (&rayDirInv.x)[i];
+      if (t1 > t2) { float tmp = t1; t1 = t2; t2 = tmp; }
+      tMin = fmax(tMin, t1);
+      tMax = fmin(tMax, t2);
+      if (tMin > tMax) return false;
+    }
+    return true;
+  }
+
+  // Surface area (for SAH)
+  float surfaceArea() const {
+    vec3 d = max - min;
+    return 2.0f * (d.x * d.y + d.y * d.z + d.z * d.x);
+  }
+
+  // Center point
+  vec3 center() const {
+    return vec3((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f, (min.z + max.z) * 0.5f);
+  }
+};
+
+// Primitive wrapper (sphere or triangle)
+struct Primitive {
+  enum Type { SPHERE, TRIANGLE } type;
+  int index; // Index into spheres[] or triangles[] array
+  AABB bounds;
+
+  Primitive() : type(SPHERE), index(-1) {}
+};
+
+// BVH Node
+struct BVHNode {
+  AABB bounds;
+  int leftChild;   // Index of left child (or -1 if leaf)
+  int rightChild;  // Index of right child (or -1 if leaf)
+  int primStart;   // First primitive index (for leaves)
+  int primCount;   // Number of primitives (for leaves)
+
+  BVHNode() : leftChild(-1), rightChild(-1), primStart(0), primCount(0) {}
+
+  bool isLeaf() const { return leftChild == -1; }
+};
+
 #endif
